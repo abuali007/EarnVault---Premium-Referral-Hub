@@ -2,13 +2,6 @@ import React from 'react';
 import { LinkItem, Category } from '../types';
 import { ExternalLink, Flame, Copy, Check } from 'lucide-react';
 
-// Extend window definition to include gtag
-declare global {
-  interface Window {
-    gtag?: (command: string, action: string, params?: any) => void;
-  }
-}
-
 interface LinkCardProps {
   item: LinkItem;
 }
@@ -27,25 +20,6 @@ const LinkCard: React.FC<LinkCardProps> = ({ item }) => {
       navigator.clipboard.writeText(item.code);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-      
-      // Track copy event
-      if (typeof window !== 'undefined' && window.gtag) {
-        window.gtag('event', 'copy_code', {
-          event_category: 'Engagement',
-          event_label: item.name
-        });
-      }
-    }
-  };
-
-  const handleLinkClick = () => {
-    // Track outbound link click
-    if (typeof window !== 'undefined' && window.gtag) {
-      window.gtag('event', 'click', {
-        event_category: 'Outbound Link',
-        event_label: item.name,
-        transport_type: 'beacon'
-      });
     }
   };
 
@@ -63,7 +37,6 @@ const LinkCard: React.FC<LinkCardProps> = ({ item }) => {
       href={item.url} 
       target="_blank" 
       rel="noopener noreferrer"
-      onClick={handleLinkClick}
       className="group relative flex flex-col p-4 bg-card rounded-2xl border border-slate-700 hover:border-primary/50 transition-all duration-300 hover:shadow-[0_0_20px_rgba(16,185,129,0.1)] hover:-translate-y-1 h-full"
     >
       {/* Hot Badge */}
