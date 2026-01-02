@@ -1,12 +1,14 @@
 import React from 'react';
 import { LinkItem, Category } from '../types';
-import { ExternalLink, Flame, Copy, Check } from 'lucide-react';
+import { ExternalLink, Flame, Copy, Check, MousePointerClick } from 'lucide-react';
 
 interface LinkCardProps {
   item: LinkItem;
+  clickCount?: number;
+  onLinkClick?: (id: string) => void;
 }
 
-const LinkCard: React.FC<LinkCardProps> = ({ item }) => {
+const LinkCard: React.FC<LinkCardProps> = ({ item, clickCount = 0, onLinkClick }) => {
   // Extract domain for favicon
   const domain = new URL(item.url).hostname;
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
@@ -20,6 +22,12 @@ const LinkCard: React.FC<LinkCardProps> = ({ item }) => {
       navigator.clipboard.writeText(item.code);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleLinkClick = () => {
+    if (onLinkClick) {
+      onLinkClick(item.id);
     }
   };
 
@@ -37,6 +45,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ item }) => {
       href={item.url} 
       target="_blank" 
       rel="noopener noreferrer"
+      onClick={handleLinkClick}
       className="group relative flex flex-col p-4 bg-card rounded-2xl border border-slate-700 hover:border-primary/50 transition-all duration-300 hover:shadow-[0_0_20px_rgba(16,185,129,0.1)] hover:-translate-y-1 h-full"
     >
       {/* Hot Badge */}
@@ -75,8 +84,11 @@ const LinkCard: React.FC<LinkCardProps> = ({ item }) => {
 
       <div className="mt-auto pt-3 border-t border-slate-700/50 flex items-center justify-between gap-2">
         {item.code ? (
-           <div className="flex-1 bg-dark rounded-lg px-2 py-1.5 flex items-center justify-between border border-slate-700">
-             <span className="text-xs font-mono text-slate-300 truncate mr-2">{item.code}</span>
+           <div 
+             className="flex-1 bg-dark rounded-lg px-2 py-1.5 flex items-center justify-between border border-slate-700 z-20"
+             onClick={(e) => e.preventDefault()} /* Prevent link click when clicking code box */
+           >
+             <span className="text-xs font-mono text-slate-300 truncate mr-2 select-all">{item.code}</span>
              <button 
               onClick={handleCopy}
               className="text-slate-400 hover:text-white transition-colors"
@@ -89,6 +101,12 @@ const LinkCard: React.FC<LinkCardProps> = ({ item }) => {
           <div className="flex-1"></div>
         )}
         
+        {/* Click Counter */}
+        <div className="flex items-center gap-1 px-2 py-1 bg-slate-800 rounded-lg border border-slate-700/50">
+            <MousePointerClick className="w-3 h-3 text-slate-400" />
+            <span className="text-xs font-mono text-slate-300">{clickCount}</span>
+        </div>
+
         <div className="flex items-center gap-1 text-xs font-bold text-primary opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
           REGISTER <ExternalLink className="w-3 h-3" />
         </div>

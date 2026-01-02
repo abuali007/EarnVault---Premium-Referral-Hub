@@ -12,7 +12,7 @@ export const LINKS_DATA: LinkItem[] = [
     name: 'Binance',
     url: 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_00VI77NM2Y',
     category: Category.CRYPTO,
-    description: 'The world\'s #1 crypto exchange. Best liquidity and P2P in Saudi Arabia.',
+    description: 'The world\'s #1 crypto exchange. Best liquidity and P2P trading worldwide.',
     isHot: true
   },
   {
@@ -28,7 +28,7 @@ export const LINKS_DATA: LinkItem[] = [
     name: 'YSense',
     url: 'https://www.ysense.com/?rb=149494804',
     category: Category.EARNING,
-    description: 'The most trusted earning site in KSA. High paying surveys and offers.',
+    description: 'A trusted global earning site. High paying surveys and offers available globally.',
     isHot: true
   },
   {
@@ -44,7 +44,7 @@ export const LINKS_DATA: LinkItem[] = [
     name: 'Airalo',
     url: 'https://ref.airalo.com/A1488',
     category: Category.SHOPPING,
-    description: 'Instant eSIM data packs for travel. Save huge on roaming charges.',
+    description: 'Instant eSIM data packs for global travel. Save huge on roaming charges.',
     code: 'A1488',
     isHot: true
   },
@@ -81,7 +81,7 @@ export const LINKS_DATA: LinkItem[] = [
     name: 'Mobrog',
     url: 'https://mobrog.com/?membership_promotion=0&i_invite=25860752-6956864d55601&rkm=38',
     category: Category.EARNING,
-    description: 'Dedicated Saudi survey panels paying in Dollars/Euro via PayPal.',
+    description: 'Dedicated global survey panels paying in Dollars/Euro via PayPal.',
     isHot: true
   },
   {
@@ -89,7 +89,7 @@ export const LINKS_DATA: LinkItem[] = [
     name: 'iHerb',
     url: 'https://www.iherb.com/?rcode=KQB9030',
     category: Category.SHOPPING,
-    description: 'Best source for supplements & health products in the Middle East.',
+    description: 'Best source for supplements & health products worldwide.',
     code: 'KQB9030',
     isHot: true
   },
@@ -98,7 +98,7 @@ export const LINKS_DATA: LinkItem[] = [
     name: 'Clickworker',
     url: 'https://www.clickworker.com/clickworker?customer=false&utm_source=14933405&utm_campaign=CW4CW&utm_medium=email',
     category: Category.EARNING,
-    description: 'Professional micro-tasks and AI training data jobs available in KSA.',
+    description: 'Professional micro-tasks and AI training data jobs available worldwide.',
     isHot: true
   },
   {
@@ -126,7 +126,7 @@ export const LINKS_DATA: LinkItem[] = [
     name: 'Rain',
     url: 'https://rain.com/en?ref=HQ5KSF4',
     category: Category.CRYPTO,
-    description: 'Fully licensed in Bahrain/UAE/SA. The safest local fiat on-ramp.'
+    description: 'Fully licensed and regulated. The safest local fiat on-ramp.'
   },
   {
     id: 'manus',

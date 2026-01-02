@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Menu, X, ArrowUp, Lock, Share2, Check } from 'lucide-react';
+import { Search, Menu, X, ArrowUp, Lock, Share2, Check, BarChart2, Eye } from 'lucide-react';
 import Logo from './components/Logo';
 import FilterTabs from './components/FilterTabs';
 import LinkCard from './components/LinkCard';
@@ -7,8 +7,19 @@ import EmailModal from './components/EmailModal';
 import AdminModal from './components/AdminModal';
 import LegalModal, { LegalType } from './components/LegalModal';
 import ContactModal from './components/ContactModal';
+import AdUnit from './components/AdUnit';
 import { LINKS_DATA, HERO_TITLE, HERO_SUBTITLE } from './constants';
 import { Category } from './types';
+
+// ==========================================
+// 🟢 PASTE YOUR A-ADS LINKS HERE 🟢
+// Using your Unit ID: 2422860
+// ==========================================
+const AD_URLS = {
+  HEADER: "https://acceptable.a-ads.com/2422860/?size=Adaptive",
+  IN_GRID: "https://acceptable.a-ads.com/2422860/?size=Adaptive", 
+  FOOTER: "https://acceptable.a-ads.com/2422860/?size=Adaptive"
+};
 
 const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -20,6 +31,74 @@ const App: React.FC = () => {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUrlCopied, setIsUrlCopied] = useState(false);
+  
+  // Analytics State
+  const [clickCounts, setClickCounts] = useState<Record<string, number>>({});
+  const [visitCount, setVisitCount] = useState<number>(0);
+
+  // Owner Mode State (Initialize directly from localStorage to prevent render flash)
+  const [isOwner, setIsOwner] = useState(() => {
+    return localStorage.getItem('earnVault_isOwner') === 'true';
+  });
+
+  // Toggle Owner Function
+  const handleToggleOwner = () => {
+    const newState = !isOwner;
+    setIsOwner(newState);
+    localStorage.setItem('earnVault_isOwner', String(newState));
+  };
+
+  // --- ANALYTICS LOGIC ---
+  useEffect(() => {
+    // 1. Load Clicks
+    const savedClicks = localStorage.getItem('earnVault_clicks');
+    if (savedClicks) {
+      try {
+        setClickCounts(JSON.parse(savedClicks));
+      } catch (e) {
+        console.error("Failed to parse click data", e);
+      }
+    }
+
+    // 2. Handle Visits (With Owner Exclusion)
+    const savedVisits = parseInt(localStorage.getItem('earnVault_visits') || '0');
+
+    if (!isOwner) {
+      // Only increment if NOT owner
+      // We use a session storage flag to prevent incrementing on every refresh, just once per session
+      const hasVisitedSession = sessionStorage.getItem('has_counted_visit');
+      if (!hasVisitedSession) {
+        const newVisits = savedVisits + 1;
+        localStorage.setItem('earnVault_visits', newVisits.toString());
+        setVisitCount(newVisits);
+        sessionStorage.setItem('has_counted_visit', 'true');
+      } else {
+        setVisitCount(savedVisits);
+      }
+    } else {
+      setVisitCount(savedVisits);
+    }
+  }, [isOwner]);
+
+  // Save clicks whenever they change
+  const handleLinkClick = (id: string) => {
+    // 🛑 STOP: If owner, do not count the click
+    if (isOwner) return;
+
+    setClickCounts((prev) => {
+      const newCounts = {
+        ...prev,
+        [id]: (prev[id] || 0) + 1
+      };
+      localStorage.setItem('earnVault_clicks', JSON.stringify(newCounts));
+      return newCounts;
+    });
+  };
+
+  // Calculate Total Clicks
+  const totalClicks = useMemo(() => {
+    return Object.values(clickCounts).reduce((acc: number, curr: number) => acc + curr, 0);
+  }, [clickCounts]);
 
   // Handle scroll for "Back to Top" button
   useEffect(() => {
@@ -130,8 +209,13 @@ const App: React.FC = () => {
         )}
       </header>
 
+      {/* AD SLOT 1: Header */}
+      <div className="container mx-auto px-4">
+        <AdUnit position="header" adSrc={AD_URLS.HEADER} isOwner={isOwner} />
+      </div>
+
       {/* Hero Section */}
-      <section className="relative pt-12 pb-8 px-4 text-center">
+      <section className="relative pt-6 pb-8 px-4 text-center">
         <div className="container mx-auto max-w-4xl">
           <h1 className="text-4xl md:text-7xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-white via-primary to-slate-200 mb-6 leading-tight animate-fade-in tracking-tight">
             {HERO_TITLE}
@@ -140,11 +224,18 @@ const App: React.FC = () => {
             {HERO_SUBTITLE}
           </p>
           
+          {/* Owner Mode Indicator */}
+          {isOwner && (
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500 text-emerald-500 rounded-full text-xs font-bold mb-6 animate-pulse">
+                <Lock className="w-3 h-3" /> OWNER MODE ACTIVE: Ads Hidden & Stats Paused
+            </div>
+          )}
+          
           <div className="flex flex-wrap justify-center gap-4 text-sm font-mono text-primary/80 animate-fade-in delay-100">
              <span className="bg-primary/5 px-3 py-1 rounded border border-primary/20">#Crypto</span>
              <span className="bg-primary/5 px-3 py-1 rounded border border-primary/20">#PassiveIncome</span>
              <span className="bg-primary/5 px-3 py-1 rounded border border-primary/20">#AI_Tools</span>
-             <span className="bg-primary/5 px-3 py-1 rounded border border-primary/20">#2026_Top</span>
+             <span className="bg-primary/5 px-3 py-1 rounded border border-primary/20">#Global</span>
           </div>
         </div>
       </section>
@@ -160,8 +251,19 @@ const App: React.FC = () => {
       <main className="flex-1 container mx-auto px-4 py-8">
         {filteredLinks.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-            {filteredLinks.map((item) => (
-              <LinkCard key={item.id} item={item} />
+            {filteredLinks.map((item, index) => (
+              <React.Fragment key={item.id}>
+                <LinkCard 
+                  item={item} 
+                  clickCount={clickCounts[item.id] || 0}
+                  onLinkClick={handleLinkClick}
+                />
+                
+                {/* AD SLOT 2: In-Grid (After the 6th item) */}
+                {index === 5 && (
+                  <AdUnit position="in-grid" adSrc={AD_URLS.IN_GRID} isOwner={isOwner} />
+                )}
+              </React.Fragment>
             ))}
           </div>
         ) : (
@@ -181,12 +283,47 @@ const App: React.FC = () => {
         )}
       </main>
 
+      {/* AD SLOT 3: Footer Area */}
+      <div className="container mx-auto px-4">
+        <AdUnit position="footer" adSrc={AD_URLS.FOOTER} isOwner={isOwner} />
+      </div>
+
+      {/* Analytics Footer Section */}
+      <section className="bg-slate-900/50 border-t border-slate-800 py-8">
+        <div className="container mx-auto px-4">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-8 sm:gap-16">
+                
+                {/* Total Clicks */}
+                <div className="text-center group cursor-default">
+                    <div className="text-slate-500 text-[10px] uppercase tracking-widest mb-2 font-bold group-hover:text-primary transition-colors">Total Clicks</div>
+                    <div className="flex items-center justify-center gap-3 text-3xl font-display font-bold text-white">
+                        <BarChart2 className="w-6 h-6 text-primary" />
+                        {totalClicks.toLocaleString()} 
+                    </div>
+                </div>
+
+                {/* Divider */}
+                <div className="hidden sm:block w-px h-12 bg-slate-800"></div>
+
+                {/* Total Visits */}
+                <div className="text-center group cursor-default">
+                    <div className="text-slate-500 text-[10px] uppercase tracking-widest mb-2 font-bold group-hover:text-secondary transition-colors">Total Visits</div>
+                    <div className="flex items-center justify-center gap-3 text-3xl font-display font-bold text-white">
+                        <Eye className="w-6 h-6 text-secondary" />
+                        {visitCount.toLocaleString()} 
+                    </div>
+                </div>
+
+            </div>
+        </div>
+      </section>
+
       {/* Footer */}
-      <footer className="border-t border-slate-800 bg-dark py-12 mt-12 relative">
+      <footer className="border-t border-slate-800 bg-dark py-12 relative">
         <div className="container mx-auto px-4 text-center">
           <Logo />
           <p className="mt-4 text-slate-500 max-w-md mx-auto text-sm">
-            The #1 premium hub for verified referral links. All platforms are curated to ensure safety and profitability.
+            The #1 premium hub for verified referral links. All platforms are curated to ensure safety and profitability worldwide.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-6 text-sm text-slate-400">
             <button onClick={() => setLegalModalType('privacy')} className="hover:text-primary transition-colors">Privacy Policy</button>
@@ -199,7 +336,7 @@ const App: React.FC = () => {
             </p>
              <button 
                 onClick={() => setIsAdminModalOpen(true)}
-                className="opacity-10 hover:opacity-50 transition-opacity"
+                className="opacity-20 hover:opacity-100 transition-opacity p-2"
                 title="Admin Access"
              >
                  <Lock className="w-3 h-3 text-slate-500" />
@@ -220,7 +357,15 @@ const App: React.FC = () => {
 
       {/* Modals */}
       <EmailModal isOpen={isEmailModalOpen} onClose={() => setIsEmailModalOpen(false)} />
-      <AdminModal isOpen={isAdminModalOpen} onClose={() => setIsAdminModalOpen(false)} />
+      
+      {/* Pass Owner props to AdminModal */}
+      <AdminModal 
+        isOpen={isAdminModalOpen} 
+        onClose={() => setIsAdminModalOpen(false)} 
+        isOwner={isOwner}
+        onToggleOwner={handleToggleOwner}
+      />
+      
       <LegalModal isOpen={!!legalModalType} type={legalModalType} onClose={() => setLegalModalType(null)} />
       <ContactModal isOpen={isContactModalOpen} onClose={() => setIsContactModalOpen(false)} />
     </div>
