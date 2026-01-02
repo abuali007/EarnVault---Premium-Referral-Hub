@@ -1,43 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LinkItem, Category } from '../types';
 import { ExternalLink, Flame, Copy, Check, MousePointerClick, Loader2 } from 'lucide-react';
-
-// NAMESPACE MUST REMAIN CONSTANT TO PRESERVE DATA
-const COUNTER_NAMESPACE = "earnvault-official-ledger-v1";
+import { COUNTER_NAMESPACE } from '../App';
 
 interface LinkCardProps {
   item: LinkItem;
   onLinkClick?: (id: string) => void;
+  onGlobalClickIncrement?: () => void;
 }
 
-const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick }) => {
+const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick, onGlobalClickIncrement }) => {
   // Extract domain for favicon
   const domain = new URL(item.url).hostname;
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
   
   const [copied, setCopied] = useState(false);
   const cardRef = useRef<HTMLAnchorElement>(null);
-  const [isVisible, setIsVisible] = useState(false); // For lazy loading
+  const [isVisible, setIsVisible] = useState(false);
   
-  // Initialize clicks from local storage first (Instant UI)
-  const [clicks, setClicks] = useState<number | null>(() => {
-    const saved = localStorage.getItem(`ev_link_${item.id}_clicks`);
-    return saved ? parseInt(saved, 10) : null;
-  });
-  
-  const [isLoadingClicks, setIsLoadingClicks] = useState(clicks === null);
+  // Stats
+  const [clicks, setClicks] = useState<number | null>(null);
 
-  // --- 1. LAZY LOAD TRIGGER (Intersection Observer) ---
-  // Only start fetching when the user scrolls to this card
+  // --- 1. LAZY LOAD TRIGGER ---
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
           setIsVisible(true);
-          observer.disconnect(); // Stop observing once visible
+          observer.disconnect();
         }
       },
-      { threshold: 0.1 } // Trigger when 10% of card is visible
+      { threshold: 0.1 }
     );
 
     if (cardRef.current) {
@@ -47,41 +40,25 @@ const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick }) => {
     return () => observer.disconnect();
   }, []);
 
-  // --- 2. FETCH DATA ONLY WHEN VISIBLE ---
+  // --- 2. FETCH DATA WHEN VISIBLE ---
   useEffect(() => {
-    if (!isVisible) return; // Don't fetch if not on screen
+    if (!isVisible) return;
 
-    let isMounted = true;
+    // Use GET to just read the current number
+    fetch(`https://api.countapi.xyz/get/${COUNTER_NAMESPACE}/link_${item.id}_clicks`)
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Stats fetch failed');
+      })
+      .then(data => {
+        if (data && typeof data.value === 'number') setClicks(data.value);
+        else setClicks(0);
+      })
+      .catch(() => {
+        setClicks(0); // Silent fallback on error/block
+      });
 
-    const fetchClicks = async () => {
-      try {
-        const res = await fetch(`https://api.countapi.xyz/get/${COUNTER_NAMESPACE}/link_${item.id}_clicks`);
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted && data.value > 0) {
-            setClicks(data.value);
-            localStorage.setItem(`ev_link_${item.id}_clicks`, data.value.toString());
-            setIsLoadingClicks(false);
-          } else if (isMounted && clicks === null) {
-             setClicks(0);
-             setIsLoadingClicks(false);
-          } else {
-             setIsLoadingClicks(false);
-          }
-        } else {
-          // If 404/Error, stop loading, stick to cache if exists
-          if (isMounted) setIsLoadingClicks(false);
-        }
-      } catch (error) {
-        // Network error (AdBlock), stick to cache
-        if (isMounted) setIsLoadingClicks(false);
-      }
-    };
-
-    fetchClicks();
-
-    return () => { isMounted = false; };
-  }, [isVisible, item.id]); // Dependency on isVisible
+  }, [isVisible, item.id]);
 
   const handleCopy = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -94,20 +71,18 @@ const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick }) => {
   };
 
   const handleLinkClick = () => {
-    // 1. Optimistic Update
-    const newCount = (clicks || 0) + 1;
-    setClicks(newCount);
-    localStorage.setItem(`ev_link_${item.id}_clicks`, newCount.toString());
+    // 1. Optimistic Update (Local)
+    setClicks(prev => (prev || 0) + 1);
 
-    // 2. Track (Fire & Forget)
-    try {
-        fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/link_${item.id}_clicks`, {
-            keepalive: true,
-            method: 'GET'
-        }).catch(() => {});
-    } catch (e) {}
+    // 2. Hit Server (Individual Link)
+    fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/link_${item.id}_clicks`).catch(() => {});
 
-    // 3. Trigger parent handler
+    // 3. Update Global Counter in Footer
+    if (onGlobalClickIncrement) {
+        onGlobalClickIncrement();
+    }
+
+    // 4. Parent callback
     if (onLinkClick) {
       onLinkClick(item.id);
     }
@@ -188,10 +163,10 @@ const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick }) => {
         <div className="flex items-center gap-3">
             <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono" title="Total Clicks">
                 <MousePointerClick className="w-3 h-3" />
-                {isLoadingClicks ? (
+                {clicks === null ? (
                     <Loader2 className="w-3 h-3 animate-spin" />
                 ) : (
-                    <span>{(clicks || 0).toLocaleString()}</span>
+                    <span>{clicks.toLocaleString()}</span>
                 )}
             </div>
 

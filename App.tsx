@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Menu, X, ArrowUp, Share2, Check, BarChart2, Eye, Globe } from 'lucide-react';
+import { Search, Menu, X, ArrowUp, Share2, Check, BarChart2, Eye, Globe, Activity, Loader2 } from 'lucide-react';
 import Logo from './components/Logo';
 import FilterTabs from './components/FilterTabs';
 import LinkCard from './components/LinkCard';
@@ -20,10 +20,10 @@ const AD_URLS = {
   FOOTER: "https://acceptable.a-ads.com/2422860/?size=Adaptive"
 };
 
-// Cloud API Namespace
-const COUNTER_NAMESPACE = "earnvault-official-ledger-v1";
-const COUNTER_KEY_VISITS = "site_visits_total";
-const COUNTER_KEY_CLICKS = "site_clicks_total";
+// Cloud API Namespace (FRESH START)
+export const COUNTER_NAMESPACE = "earnvault-live-system-v1";
+const COUNTER_KEY_VISITS = "global_visits";
+const COUNTER_KEY_CLICKS = "global_clicks";
 
 const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,105 +35,91 @@ const App: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUrlCopied, setIsUrlCopied] = useState(false);
   
-  // --- ANALYTICS STATE WITH ROBUST LOCAL CACHING ---
-  // Initialize directly from LocalStorage to prevent "0" flash
-  const [globalVisits, setGlobalVisits] = useState<number>(() => {
-    const saved = localStorage.getItem('ev_stats_visits');
-    // Default to a realistic starting number if nothing is saved (e.g. 1)
-    return saved ? parseInt(saved, 10) : 1;
-  });
-  
-  const [globalClicks, setGlobalClicks] = useState<number>(() => {
-    const saved = localStorage.getItem('ev_stats_clicks');
-    return saved ? parseInt(saved, 10) : 0;
-  });
-
-  const [isLoadingStats, setIsLoadingStats] = useState(true);
+  // --- ANALYTICS STATE ---
+  const [globalVisits, setGlobalVisits] = useState<number | null>(null);
+  const [globalClicks, setGlobalClicks] = useState<number | null>(null);
 
   // --- GLOBAL CLOUD ANALYTICS LOGIC ---
   useEffect(() => {
-    // 1. Define Helper to update state & storage safely
-    const updateLocalVisits = (newVal: number) => {
-        setGlobalVisits(prev => {
-            // Always take the higher number to prevent rolling back
-            const final = Math.max(prev, newVal);
-            localStorage.setItem('ev_stats_visits', final.toString());
-            return final;
-        });
-    };
-
-    const updateLocalClicks = (newVal: number) => {
-        setGlobalClicks(prev => {
-            const final = Math.max(prev, newVal);
-            localStorage.setItem('ev_stats_clicks', final.toString());
-            return final;
-        });
-    };
-
-    const syncStats = async () => {
-      // A. Increment Visit (Optimistic - Immediate for User)
-      const hasCountedSession = sessionStorage.getItem('has_counted_cloud_visit');
-      if (!hasCountedSession) {
-          // Immediately increment visual counter for satisfaction
-          updateLocalVisits(globalVisits + 1);
-          sessionStorage.setItem('has_counted_cloud_visit', 'true');
-
-          // Send Hit to Server (Fire & Forget)
-          try {
-             fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/${COUNTER_KEY_VISITS}`).catch(() => {});
-          } catch (e) { /* Ignore AdBlock errors */ }
-      }
-
-      // B. Fetch Latest Data from Cloud to Sync
-      try {
-        const [visitsRes, clicksRes] = await Promise.all([
-            fetch(`https://api.countapi.xyz/get/${COUNTER_NAMESPACE}/${COUNTER_KEY_VISITS}`),
-            fetch(`https://api.countapi.xyz/get/${COUNTER_NAMESPACE}/${COUNTER_KEY_CLICKS}`)
-        ]);
-
-        if (visitsRes.ok) {
-            const vData = await visitsRes.json();
-            if (vData.value > 0) updateLocalVisits(vData.value);
+    // 1. HIT VISIT (Increments server count by 1)
+    const registerVisit = async () => {
+        try {
+           const res = await fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/${COUNTER_KEY_VISITS}`);
+           if (res.ok) {
+             const data = await res.json();
+             setGlobalVisits(data.value);
+             // Cache for fallback
+             localStorage.setItem('ev_backup_visits', data.value.toString());
+           } else {
+             throw new Error('Analytics API Error');
+           }
+        } catch (e) {
+           // Silent fail: AdBlock or Network Error
+           // Use backup if available
+           const backup = localStorage.getItem('ev_backup_visits');
+           if (backup) {
+             setGlobalVisits(parseInt(backup, 10));
+           } else {
+             // Fallback default
+             setGlobalVisits(prev => prev || 1);
+           }
         }
-        
-        if (clicksRes.ok) {
-            const cData = await clicksRes.json();
-            if (cData.value > 0) updateLocalClicks(cData.value);
-        }
-
-      } catch (error) {
-        // If fetch fails (AdBlock/Network), we DO NOTHING.
-        // The user continues seeing the cached LocalStorage value.
-        // This solves the "0" issue.
-      } finally {
-        setIsLoadingStats(false);
-      }
     };
 
-    syncStats();
-  }, []); // Run once on mount
+    // 2. GET CLICKS (Just reads the total)
+    const fetchClicks = async () => {
+        try {
+            const res = await fetch(`https://api.countapi.xyz/get/${COUNTER_NAMESPACE}/${COUNTER_KEY_CLICKS}`);
+            if (res.ok) {
+                const data = await res.json();
+                setGlobalClicks(data.value || 0);
+                localStorage.setItem('ev_backup_clicks', (data.value || 0).toString());
+            }
+        } catch (e) {
+            const backup = localStorage.getItem('ev_backup_clicks');
+            if (backup) {
+                setGlobalClicks(parseInt(backup, 10));
+            } else {
+                setGlobalClicks(prev => prev || 0);
+            }
+        }
+    };
 
-  // Handle Link Click
-  const handleLinkClick = async (id: string) => {
-    // 1. Optimistic Update (Immediate Feedback)
-    setGlobalClicks(prev => {
-        const newVal = prev + 1;
-        localStorage.setItem('ev_stats_clicks', newVal.toString());
-        return newVal;
-    });
+    registerVisit();
+    fetchClicks();
 
-    // 2. Send to Cloud (Fire & Forget)
-    try {
-      // Global Hit
-      fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/${COUNTER_KEY_CLICKS}`).catch(() => {});
-      // Item Hit
-      fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/link_${id}_clicks`).catch(() => {});
-    } catch (e) {
-      // Ignore network errors
-    }
+    // LIVE POLLING: Update stats every 15 seconds (reduced freq to avoid rate limits)
+    const interval = setInterval(() => {
+        fetch(`https://api.countapi.xyz/get/${COUNTER_NAMESPACE}/${COUNTER_KEY_VISITS}`)
+            .then(res => { if (res.ok) return res.json(); throw new Error(); })
+            .then(d => {
+                setGlobalVisits(d.value);
+                localStorage.setItem('ev_backup_visits', d.value.toString());
+            })
+            .catch(() => {}); // Silent catch
+
+        fetch(`https://api.countapi.xyz/get/${COUNTER_NAMESPACE}/${COUNTER_KEY_CLICKS}`)
+            .then(res => { if (res.ok) return res.json(); throw new Error(); })
+            .then(d => {
+                setGlobalClicks(d.value);
+                localStorage.setItem('ev_backup_clicks', d.value.toString());
+            })
+            .catch(() => {}); // Silent catch
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, []); 
+
+  // Function passed to LinkCard to update global stats instantly
+  const incrementGlobalClicks = () => {
+    // 1. Optimistic UI update
+    setGlobalClicks(prev => (prev || 0) + 1);
+    
+    // 2. Server HIT (Fire & Forget)
+    fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/${COUNTER_KEY_CLICKS}`).catch(() => {});
   };
 
-  // Handle scroll for "Back to Top" button
+  // Scroll Handler
   useEffect(() => {
     const handleScroll = () => {
       setShowScrollTop(window.scrollY > 400);
@@ -280,7 +266,10 @@ const App: React.FC = () => {
               <React.Fragment key={item.id}>
                 <LinkCard 
                   item={item} 
-                  onLinkClick={handleLinkClick}
+                  onLinkClick={() => {
+                      // We can add additional logic here if needed
+                  }}
+                  onGlobalClickIncrement={incrementGlobalClicks}
                 />
                 
                 {/* AD SLOT 2: In-Grid (After the 6th item) */}
@@ -332,7 +321,11 @@ const App: React.FC = () => {
                     <div className="text-slate-500 text-[10px] uppercase tracking-widest mb-2 font-bold group-hover:text-primary transition-colors">Total Link Clicks</div>
                     <div className="flex items-center justify-center gap-3 text-3xl sm:text-4xl font-display font-bold text-white tabular-nums">
                         <BarChart2 className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
-                        {globalClicks.toLocaleString()}
+                        {globalClicks === null ? (
+                            <Loader2 className="w-6 h-6 animate-spin text-slate-600" />
+                        ) : (
+                            globalClicks.toLocaleString()
+                        )}
                     </div>
                 </div>
 
@@ -341,19 +334,30 @@ const App: React.FC = () => {
 
                 {/* Global Visits */}
                 <div className="text-center group cursor-default">
-                    <div className="text-slate-500 text-[10px] uppercase tracking-widest mb-2 font-bold group-hover:text-secondary transition-colors">Worldwide Visitors</div>
+                    <div className="flex items-center justify-center gap-2 text-slate-500 text-[10px] uppercase tracking-widest mb-2 font-bold group-hover:text-secondary transition-colors">
+                        Worldwide Visitors
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                    </div>
                     <div className="flex items-center justify-center gap-3 text-3xl sm:text-4xl font-display font-bold text-white tabular-nums">
                         <Eye className="w-6 h-6 sm:w-8 sm:h-8 text-secondary" />
-                        {globalVisits.toLocaleString()}
+                        {globalVisits === null ? (
+                            <Loader2 className="w-6 h-6 animate-spin text-slate-600" />
+                        ) : (
+                            globalVisits.toLocaleString()
+                        )}
                     </div>
                 </div>
 
             </div>
             
             <div className="text-center mt-6">
-                <p className="text-[10px] text-slate-600">
-                    * Stats updated in real-time.
-                </p>
+                <div className="flex items-center justify-center gap-2 text-[10px] text-slate-600">
+                    <Activity className="w-3 h-3 text-primary animate-pulse" />
+                    Live System Active
+                </div>
             </div>
         </div>
       </section>
