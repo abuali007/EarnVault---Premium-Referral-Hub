@@ -1,35 +1,16 @@
 import React from 'react';
-import { ShieldAlert, Frown } from 'lucide-react';
+import { Frown } from 'lucide-react';
 
 interface AdUnitProps {
   position: 'header' | 'in-grid' | 'footer';
   adSrc?: string; 
   className?: string;
-  isOwner?: boolean; 
+  // isOwner prop removed as it is no longer used
 }
 
-const AdUnit: React.FC<AdUnitProps> = ({ position, adSrc, className = '', isOwner = false }) => {
+const AdUnit: React.FC<AdUnitProps> = ({ position, adSrc, className = '' }) => {
   
-  // 1. Owner Mode: Show "Hidden" state
-  if (isOwner) {
-    const ownerClasses = {
-        header: "w-full max-w-[728px] h-[90px] mx-auto my-6 hidden md:flex items-center justify-center",
-        'in-grid': "col-span-1 sm:col-span-2 lg:col-span-3 xl:col-span-4 w-full h-[100px] sm:h-[120px] my-4 flex items-center justify-center",
-        footer: "w-full max-w-[728px] h-[90px] mx-auto my-8 flex items-center justify-center"
-    };
-
-    return (
-        <div className={`${ownerClasses[position]} ${className} bg-emerald-900/10 border border-emerald-900/30 rounded-xl flex items-center justify-center gap-2 relative overflow-hidden`}>
-             <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(45deg, #000 25%, transparent 25%, transparent 50%, #000 50%, #000 75%, transparent 75%, transparent)', backgroundSize: '10px 10px'}}></div>
-            <div className="z-10 flex items-center gap-2 text-emerald-500 font-mono text-xs uppercase tracking-wider font-bold">
-                <ShieldAlert className="w-4 h-4" />
-                <span>Owner Mode: Ads Paused</span>
-            </div>
-        </div>
-    );
-  }
-
-  // 2. Standard User Mode with AdBlock Detection Layering
+  // Standard User Mode with AdBlock Detection Layering
   const containerClasses = {
     header: "w-full max-w-[728px] h-[90px] mx-auto my-6 hidden md:flex",
     'in-grid': "col-span-1 sm:col-span-2 lg:col-span-3 xl:col-span-4 w-full h-[100px] sm:h-[120px] my-4 flex",

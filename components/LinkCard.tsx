@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LinkItem, Category } from '../types';
 import { ExternalLink, Flame, Copy, Check, MousePointerClick, Loader2 } from 'lucide-react';
 
-// Using the same namespace as App.tsx to ensure data sync
-const COUNTER_NAMESPACE = "earnvault-global-v2";
+// NAMESPACE MUST REMAIN CONSTANT TO PRESERVE DATA
+const COUNTER_NAMESPACE = "earnvault-official-ledger-v1";
 
 interface LinkCardProps {
   item: LinkItem;
@@ -16,49 +16,72 @@ const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick }) => {
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
   
   const [copied, setCopied] = useState(false);
-  const [clicks, setClicks] = useState<number | null>(null);
-  const [isLoadingClicks, setIsLoadingClicks] = useState(true);
+  const cardRef = useRef<HTMLAnchorElement>(null);
+  const [isVisible, setIsVisible] = useState(false); // For lazy loading
+  
+  // Initialize clicks from local storage first (Instant UI)
+  const [clicks, setClicks] = useState<number | null>(() => {
+    const saved = localStorage.getItem(`ev_link_${item.id}_clicks`);
+    return saved ? parseInt(saved, 10) : null;
+  });
+  
+  const [isLoadingClicks, setIsLoadingClicks] = useState(clicks === null);
 
-  // --- FETCH CLICK COUNT ON MOUNT ---
+  // --- 1. LAZY LOAD TRIGGER (Intersection Observer) ---
+  // Only start fetching when the user scrolls to this card
   useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect(); // Stop observing once visible
+        }
+      },
+      { threshold: 0.1 } // Trigger when 10% of card is visible
+    );
+
+    if (cardRef.current) {
+      observer.observe(cardRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  // --- 2. FETCH DATA ONLY WHEN VISIBLE ---
+  useEffect(() => {
+    if (!isVisible) return; // Don't fetch if not on screen
+
     let isMounted = true;
 
     const fetchClicks = async () => {
-      // ⚡ Smart Strategy: Add a random delay between 0ms and 2500ms
-      // This prevents all 30 cards from hitting the API at the exact same millisecond
-      const randomDelay = Math.random() * 2500;
-      await new Promise(resolve => setTimeout(resolve, randomDelay));
-
-      if (!isMounted) return;
-
       try {
         const res = await fetch(`https://api.countapi.xyz/get/${COUNTER_NAMESPACE}/link_${item.id}_clicks`);
         if (res.ok) {
           const data = await res.json();
-          if (isMounted) {
-            setClicks(data.value || 0);
+          if (isMounted && data.value > 0) {
+            setClicks(data.value);
+            localStorage.setItem(`ev_link_${item.id}_clicks`, data.value.toString());
             setIsLoadingClicks(false);
+          } else if (isMounted && clicks === null) {
+             setClicks(0);
+             setIsLoadingClicks(false);
+          } else {
+             setIsLoadingClicks(false);
           }
         } else {
-          // If key doesn't exist yet (404), assume 0
-          if (isMounted) {
-            setClicks(0);
-            setIsLoadingClicks(false);
-          }
+          // If 404/Error, stop loading, stick to cache if exists
+          if (isMounted) setIsLoadingClicks(false);
         }
       } catch (error) {
-        // Use 0 on network error
-        if (isMounted) {
-           setClicks(0);
-           setIsLoadingClicks(false);
-        }
+        // Network error (AdBlock), stick to cache
+        if (isMounted) setIsLoadingClicks(false);
       }
     };
 
     fetchClicks();
 
     return () => { isMounted = false; };
-  }, [item.id]);
+  }, [isVisible, item.id]); // Dependency on isVisible
 
   const handleCopy = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -71,22 +94,18 @@ const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick }) => {
   };
 
   const handleLinkClick = () => {
-    // 1. Optimistic Update: Increase number immediately on UI
-    if (clicks !== null) {
-        setClicks(clicks + 1);
-    } else {
-        setClicks(1);
-    }
+    // 1. Optimistic Update
+    const newCount = (clicks || 0) + 1;
+    setClicks(newCount);
+    localStorage.setItem(`ev_link_${item.id}_clicks`, newCount.toString());
 
-    // 2. Track the click with 'keepalive' to ensure it counts even if page closes
+    // 2. Track (Fire & Forget)
     try {
         fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/link_${item.id}_clicks`, {
-            keepalive: true, // CRITICAL: Ensures request completes even if browser navigates away
+            keepalive: true,
             method: 'GET'
-        }).catch(() => {}); // Silent catch
-    } catch (e) {
-        // Ignore errors
-    }
+        }).catch(() => {});
+    } catch (e) {}
 
     // 3. Trigger parent handler
     if (onLinkClick) {
@@ -105,6 +124,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick }) => {
 
   return (
     <a 
+      ref={cardRef}
       href={item.url} 
       target="_blank" 
       rel="noopener noreferrer"
@@ -149,7 +169,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick }) => {
         {item.code ? (
            <div 
              className="flex-1 max-w-[50%] bg-dark rounded-lg px-2 py-1.5 flex items-center justify-between border border-slate-700 z-20"
-             onClick={(e) => e.preventDefault()} /* Prevent link click when clicking code box */
+             onClick={(e) => e.preventDefault()}
            >
              <span className="text-xs font-mono text-slate-300 truncate mr-2 select-all">{item.code}</span>
              <button 
@@ -161,23 +181,20 @@ const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick }) => {
              </button>
            </div>
         ) : (
-           // Spacer if no code
            <div className="flex-1"></div>
         )}
         
         {/* --- CLICK COUNTER & BUTTON --- */}
         <div className="flex items-center gap-3">
-            {/* Counter */}
             <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono" title="Total Clicks">
                 <MousePointerClick className="w-3 h-3" />
                 {isLoadingClicks ? (
                     <Loader2 className="w-3 h-3 animate-spin" />
                 ) : (
-                    <span>{clicks?.toLocaleString()}</span>
+                    <span>{(clicks || 0).toLocaleString()}</span>
                 )}
             </div>
 
-            {/* Open Button */}
             <div className="flex items-center gap-1 text-xs font-bold text-primary group-hover:opacity-100 transition-all duration-300 bg-primary/10 px-2 py-1.5 rounded-lg border border-primary/20 group-hover:bg-primary group-hover:text-dark">
               OPEN <ExternalLink className="w-3 h-3" />
             </div>
