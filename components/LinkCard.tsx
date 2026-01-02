@@ -1,19 +1,64 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { LinkItem, Category } from '../types';
-import { ExternalLink, Flame, Copy, Check, MousePointerClick } from 'lucide-react';
+import { ExternalLink, Flame, Copy, Check, MousePointerClick, Loader2 } from 'lucide-react';
+
+// Using the same namespace as App.tsx to ensure data sync
+const COUNTER_NAMESPACE = "earnvault-global-v2";
 
 interface LinkCardProps {
   item: LinkItem;
-  clickCount?: number;
   onLinkClick?: (id: string) => void;
 }
 
-const LinkCard: React.FC<LinkCardProps> = ({ item, clickCount = 0, onLinkClick }) => {
+const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick }) => {
   // Extract domain for favicon
   const domain = new URL(item.url).hostname;
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
   
-  const [copied, setCopied] = React.useState(false);
+  const [copied, setCopied] = useState(false);
+  const [clicks, setClicks] = useState<number | null>(null);
+  const [isLoadingClicks, setIsLoadingClicks] = useState(true);
+
+  // --- FETCH CLICK COUNT ON MOUNT ---
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchClicks = async () => {
+      // ⚡ Smart Strategy: Add a random delay between 0ms and 2500ms
+      // This prevents all 30 cards from hitting the API at the exact same millisecond
+      const randomDelay = Math.random() * 2500;
+      await new Promise(resolve => setTimeout(resolve, randomDelay));
+
+      if (!isMounted) return;
+
+      try {
+        const res = await fetch(`https://api.countapi.xyz/get/${COUNTER_NAMESPACE}/link_${item.id}_clicks`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setClicks(data.value || 0);
+            setIsLoadingClicks(false);
+          }
+        } else {
+          // If key doesn't exist yet (404), assume 0
+          if (isMounted) {
+            setClicks(0);
+            setIsLoadingClicks(false);
+          }
+        }
+      } catch (error) {
+        // Use 0 on network error
+        if (isMounted) {
+           setClicks(0);
+           setIsLoadingClicks(false);
+        }
+      }
+    };
+
+    fetchClicks();
+
+    return () => { isMounted = false; };
+  }, [item.id]);
 
   const handleCopy = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -26,6 +71,24 @@ const LinkCard: React.FC<LinkCardProps> = ({ item, clickCount = 0, onLinkClick }
   };
 
   const handleLinkClick = () => {
+    // 1. Optimistic Update: Increase number immediately on UI
+    if (clicks !== null) {
+        setClicks(clicks + 1);
+    } else {
+        setClicks(1);
+    }
+
+    // 2. Track the click with 'keepalive' to ensure it counts even if page closes
+    try {
+        fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/link_${item.id}_clicks`, {
+            keepalive: true, // CRITICAL: Ensures request completes even if browser navigates away
+            method: 'GET'
+        }).catch(() => {}); // Silent catch
+    } catch (e) {
+        // Ignore errors
+    }
+
+    // 3. Trigger parent handler
     if (onLinkClick) {
       onLinkClick(item.id);
     }
@@ -85,7 +148,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ item, clickCount = 0, onLinkClick }
       <div className="mt-auto pt-3 border-t border-slate-700/50 flex items-center justify-between gap-2">
         {item.code ? (
            <div 
-             className="flex-1 bg-dark rounded-lg px-2 py-1.5 flex items-center justify-between border border-slate-700 z-20"
+             className="flex-1 max-w-[50%] bg-dark rounded-lg px-2 py-1.5 flex items-center justify-between border border-slate-700 z-20"
              onClick={(e) => e.preventDefault()} /* Prevent link click when clicking code box */
            >
              <span className="text-xs font-mono text-slate-300 truncate mr-2 select-all">{item.code}</span>
@@ -98,17 +161,26 @@ const LinkCard: React.FC<LinkCardProps> = ({ item, clickCount = 0, onLinkClick }
              </button>
            </div>
         ) : (
-          <div className="flex-1"></div>
+           // Spacer if no code
+           <div className="flex-1"></div>
         )}
         
-        {/* Click Counter */}
-        <div className="flex items-center gap-1 px-2 py-1 bg-slate-800 rounded-lg border border-slate-700/50">
-            <MousePointerClick className="w-3 h-3 text-slate-400" />
-            <span className="text-xs font-mono text-slate-300">{clickCount}</span>
-        </div>
+        {/* --- CLICK COUNTER & BUTTON --- */}
+        <div className="flex items-center gap-3">
+            {/* Counter */}
+            <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono" title="Total Clicks">
+                <MousePointerClick className="w-3 h-3" />
+                {isLoadingClicks ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                    <span>{clicks?.toLocaleString()}</span>
+                )}
+            </div>
 
-        <div className="flex items-center gap-1 text-xs font-bold text-primary opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
-          REGISTER <ExternalLink className="w-3 h-3" />
+            {/* Open Button */}
+            <div className="flex items-center gap-1 text-xs font-bold text-primary group-hover:opacity-100 transition-all duration-300 bg-primary/10 px-2 py-1.5 rounded-lg border border-primary/20 group-hover:bg-primary group-hover:text-dark">
+              OPEN <ExternalLink className="w-3 h-3" />
+            </div>
         </div>
       </div>
     </a>

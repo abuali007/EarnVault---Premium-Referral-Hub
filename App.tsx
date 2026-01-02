@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Menu, X, ArrowUp, Lock, Share2, Check, BarChart2, Eye } from 'lucide-react';
+import { Search, Menu, X, ArrowUp, Lock, Share2, Check, BarChart2, Eye, Globe, ShieldCheck } from 'lucide-react';
 import Logo from './components/Logo';
 import FilterTabs from './components/FilterTabs';
 import LinkCard from './components/LinkCard';
@@ -21,6 +21,11 @@ const AD_URLS = {
   FOOTER: "https://acceptable.a-ads.com/2422860/?size=Adaptive"
 };
 
+// Cloud API Namespace (Updated to v2 for clean start)
+const COUNTER_NAMESPACE = "earnvault-global-v2";
+const COUNTER_KEY_VISITS = "visits";
+const COUNTER_KEY_CLICKS = "clicks";
+
 const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category>(Category.ALL);
@@ -32,73 +37,122 @@ const App: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUrlCopied, setIsUrlCopied] = useState(false);
   
-  // Analytics State
-  const [clickCounts, setClickCounts] = useState<Record<string, number>>({});
-  const [visitCount, setVisitCount] = useState<number>(0);
+  // Analytics State (Global)
+  const [globalVisits, setGlobalVisits] = useState<number>(0);
+  const [globalClicks, setGlobalClicks] = useState<number>(0);
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
 
-  // Owner Mode State (Initialize directly from localStorage to prevent render flash)
+  // Owner Mode State
   const [isOwner, setIsOwner] = useState(() => {
     return localStorage.getItem('earnVault_isOwner') === 'true';
   });
 
-  // Toggle Owner Function
+  // --- 🛡️ SECRET ADMIN ENTRY LOGIC 🛡️ ---
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    // If URL contains ?admin=true, force Enable Owner Mode
+    if (params.get('admin') === 'true') {
+        setIsOwner(true);
+        localStorage.setItem('earnVault_isOwner', 'true');
+        
+        // Clean the URL so visitors don't see the secret param
+        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+        window.history.replaceState({path: newUrl}, '', newUrl);
+    }
+  }, []);
+
   const handleToggleOwner = () => {
     const newState = !isOwner;
     setIsOwner(newState);
     localStorage.setItem('earnVault_isOwner', String(newState));
   };
 
-  // --- ANALYTICS LOGIC ---
+  // --- GLOBAL CLOUD ANALYTICS ---
   useEffect(() => {
-    // 1. Load Clicks
-    const savedClicks = localStorage.getItem('earnVault_clicks');
-    if (savedClicks) {
+    // Helper to safely get value or return 0 if 404/Error
+    const safeGetStats = async (key: string) => {
+        try {
+            const res = await fetch(`https://api.countapi.xyz/get/${COUNTER_NAMESPACE}/${key}`);
+            if (res.ok) {
+                const data = await res.json();
+                return data.value || 0;
+            }
+            // If key doesn't exist yet (404), return 0
+            return 0;
+        } catch (e) {
+            // Network error (e.g. AdBlocker), return null to keep loading state or 0
+            return 0;
+        }
+    };
+
+    const fetchStats = async () => {
       try {
-        setClickCounts(JSON.parse(savedClicks));
-      } catch (e) {
-        console.error("Failed to parse click data", e);
+        const [visits, clicks] = await Promise.all([
+            safeGetStats(COUNTER_KEY_VISITS),
+            safeGetStats(COUNTER_KEY_CLICKS)
+        ]);
+
+        setGlobalVisits(visits);
+        setGlobalClicks(clicks);
+      } finally {
+        setIsLoadingStats(false);
       }
-    }
+    };
 
-    // 2. Handle Visits (With Owner Exclusion)
-    const savedVisits = parseInt(localStorage.getItem('earnVault_visits') || '0');
-
-    if (!isOwner) {
-      // Only increment if NOT owner
-      // We use a session storage flag to prevent incrementing on every refresh, just once per session
-      const hasVisitedSession = sessionStorage.getItem('has_counted_visit');
-      if (!hasVisitedSession) {
-        const newVisits = savedVisits + 1;
-        localStorage.setItem('earnVault_visits', newVisits.toString());
-        setVisitCount(newVisits);
-        sessionStorage.setItem('has_counted_visit', 'true');
+    const registerVisit = async () => {
+      const hasCountedSession = sessionStorage.getItem('has_counted_cloud_visit');
+      
+      // 🛑 STOP: Never count visit if Owner
+      if (!isOwner && !hasCountedSession) {
+        try {
+           // 'hit' creates the key if it doesn't exist
+           const res = await fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/${COUNTER_KEY_VISITS}`);
+           if (res.ok) {
+             const data = await res.json();
+             if (data?.value) {
+               setGlobalVisits(data.value);
+               sessionStorage.setItem('has_counted_cloud_visit', 'true');
+               // Also fetch clicks to keep them in sync
+               const clicks = await safeGetStats(COUNTER_KEY_CLICKS);
+               setGlobalClicks(clicks);
+             }
+           } else {
+               // Fallback if hit fails (service down?)
+               fetchStats();
+           }
+        } catch (e) {
+          // Silent catch: Likely AdBlocker blocking the tracker. 
+          // Do NOT log error to console to keep user experience clean.
+          fetchStats(); 
+        }
       } else {
-        setVisitCount(savedVisits);
+        fetchStats();
       }
-    } else {
-      setVisitCount(savedVisits);
-    }
+    };
+
+    registerVisit();
   }, [isOwner]);
 
-  // Save clicks whenever they change
-  const handleLinkClick = (id: string) => {
-    // 🛑 STOP: If owner, do not count the click
-    if (isOwner) return;
+  // Handle Link Click (Global Increment + Per Link Tracking)
+  const handleLinkClick = async (id: string) => {
+    if (isOwner) return; // 🛑 STOP: Never count clicks if Owner
 
-    setClickCounts((prev) => {
-      const newCounts = {
-        ...prev,
-        [id]: (prev[id] || 0) + 1
-      };
-      localStorage.setItem('earnVault_clicks', JSON.stringify(newCounts));
-      return newCounts;
-    });
+    // Optimistic UI Update for Global Stats
+    setGlobalClicks(prev => prev + 1);
+
+    try {
+      // 1. Hit Global Counter (Fire and forget)
+      fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/${COUNTER_KEY_CLICKS}`).catch(() => {});
+      
+      // 2. Hit Individual Link Counter (Backend Tracking)
+      // This creates/increments a key like: earnvault-global-v2/link_binance_clicks
+      // We do NOT wait for this or display it to avoid lag.
+      fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/link_${id}_clicks`).catch(() => {});
+
+    } catch (e) {
+      // Ignore network errors
+    }
   };
-
-  // Calculate Total Clicks
-  const totalClicks = useMemo(() => {
-    return Object.values(clickCounts).reduce((acc: number, curr: number) => acc + curr, 0);
-  }, [clickCounts]);
 
   // Handle scroll for "Back to Top" button
   useEffect(() => {
@@ -119,7 +173,6 @@ const App: React.FC = () => {
     setTimeout(() => setIsUrlCopied(false), 2000);
   };
 
-  // Filter Logic
   const filteredLinks = useMemo(() => {
     return LINKS_DATA.filter(item => {
       const matchesCategory = selectedCategory === Category.ALL || item.category === selectedCategory;
@@ -224,10 +277,11 @@ const App: React.FC = () => {
             {HERO_SUBTITLE}
           </p>
           
-          {/* Owner Mode Indicator */}
+          {/* Owner Mode Indicator - BIG AND RED */}
           {isOwner && (
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500 text-emerald-500 rounded-full text-xs font-bold mb-6 animate-pulse">
-                <Lock className="w-3 h-3" /> OWNER MODE ACTIVE: Ads Hidden & Stats Paused
+            <div className="inline-flex items-center gap-2 px-6 py-3 bg-red-500/10 border-2 border-red-500 text-red-500 rounded-full text-sm font-bold mb-6 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.2)]">
+                <ShieldCheck className="w-5 h-5" /> 
+                OWNER MODE ACTIVE: ADS BLOCKED & STATS PAUSED
             </div>
           )}
           
@@ -255,7 +309,6 @@ const App: React.FC = () => {
               <React.Fragment key={item.id}>
                 <LinkCard 
                   item={item} 
-                  clickCount={clickCounts[item.id] || 0}
                   onLinkClick={handleLinkClick}
                 />
                 
@@ -288,32 +341,56 @@ const App: React.FC = () => {
         <AdUnit position="footer" adSrc={AD_URLS.FOOTER} isOwner={isOwner} />
       </div>
 
-      {/* Analytics Footer Section */}
-      <section className="bg-slate-900/50 border-t border-slate-800 py-8">
-        <div className="container mx-auto px-4">
+      {/* GLOBAL ANALYTICS FOOTER */}
+      <section className="bg-slate-900/50 border-t border-slate-800 py-8 relative overflow-hidden">
+        {/* Decorative Grid */}
+        <div className="absolute inset-0 opacity-5" style={{backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>
+        
+        <div className="container mx-auto px-4 relative z-10">
+            <div className="flex flex-col items-center mb-6">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-[10px] text-slate-400 font-mono uppercase tracking-widest mb-2">
+                    <Globe className="w-3 h-3 text-secondary animate-pulse" />
+                    Global Community Stats
+                </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row items-center justify-center gap-8 sm:gap-16">
                 
-                {/* Total Clicks */}
+                {/* Global Clicks */}
                 <div className="text-center group cursor-default">
-                    <div className="text-slate-500 text-[10px] uppercase tracking-widest mb-2 font-bold group-hover:text-primary transition-colors">Total Clicks</div>
-                    <div className="flex items-center justify-center gap-3 text-3xl font-display font-bold text-white">
-                        <BarChart2 className="w-6 h-6 text-primary" />
-                        {totalClicks.toLocaleString()} 
+                    <div className="text-slate-500 text-[10px] uppercase tracking-widest mb-2 font-bold group-hover:text-primary transition-colors">Total Link Clicks</div>
+                    <div className="flex items-center justify-center gap-3 text-3xl sm:text-4xl font-display font-bold text-white tabular-nums">
+                        <BarChart2 className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
+                        {isLoadingStats ? (
+                          <span className="animate-pulse text-slate-700">...</span>
+                        ) : (
+                          globalClicks.toLocaleString()
+                        )}
                     </div>
                 </div>
 
                 {/* Divider */}
-                <div className="hidden sm:block w-px h-12 bg-slate-800"></div>
+                <div className="hidden sm:block w-px h-16 bg-gradient-to-b from-transparent via-slate-700 to-transparent"></div>
 
-                {/* Total Visits */}
+                {/* Global Visits */}
                 <div className="text-center group cursor-default">
-                    <div className="text-slate-500 text-[10px] uppercase tracking-widest mb-2 font-bold group-hover:text-secondary transition-colors">Total Visits</div>
-                    <div className="flex items-center justify-center gap-3 text-3xl font-display font-bold text-white">
-                        <Eye className="w-6 h-6 text-secondary" />
-                        {visitCount.toLocaleString()} 
+                    <div className="text-slate-500 text-[10px] uppercase tracking-widest mb-2 font-bold group-hover:text-secondary transition-colors">Worldwide Visitors</div>
+                    <div className="flex items-center justify-center gap-3 text-3xl sm:text-4xl font-display font-bold text-white tabular-nums">
+                        <Eye className="w-6 h-6 sm:w-8 sm:h-8 text-secondary" />
+                        {isLoadingStats ? (
+                          <span className="animate-pulse text-slate-700">...</span>
+                        ) : (
+                          globalVisits.toLocaleString()
+                        )}
                     </div>
                 </div>
 
+            </div>
+            
+            <div className="text-center mt-6">
+                <p className="text-[10px] text-slate-600">
+                    * Stats updated in real-time from our global network.
+                </p>
             </div>
         </div>
       </section>
@@ -358,7 +435,6 @@ const App: React.FC = () => {
       {/* Modals */}
       <EmailModal isOpen={isEmailModalOpen} onClose={() => setIsEmailModalOpen(false)} />
       
-      {/* Pass Owner props to AdminModal */}
       <AdminModal 
         isOpen={isAdminModalOpen} 
         onClose={() => setIsAdminModalOpen(false)} 
