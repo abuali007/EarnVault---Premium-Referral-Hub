@@ -16,8 +16,9 @@ const HomePage: React.FC<HomePageProps> = ({ onGlobalClickIncrement }) => {
   const [selectedCategory, setSelectedCategory] = useState<Category>(Category.ALL);
 
   // Unified Data Logic
-  // We no longer split data into "Trending" and "Directory". 
-  // Everything is one list, filtered by Search AND Category.
+  // We filter the main list based on search and category.
+  // Since LINKS_DATA in constants.ts is already ordered by Tier (Hot/Best first),
+  // we don't need to manually sort them. They will appear in the correct order naturally.
   const displayLinks = LINKS_DATA.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           item.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -62,7 +63,7 @@ const HomePage: React.FC<HomePageProps> = ({ onGlobalClickIncrement }) => {
         </div>
       </section>
 
-      {/* --- MAIN DIRECTORY SECTION --- */}
+      {/* --- MAIN DIRECTORY SECTION (Unified) --- */}
       <section className="container mx-auto px-4 py-8" id="directory">
         <div className="text-center mb-10">
             <h2 className="text-3xl font-display font-bold text-white mb-4 flex items-center justify-center gap-3">
