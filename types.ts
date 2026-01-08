@@ -1,10 +1,13 @@
-export enum Category {
-  ALL = 'All',
-  CRYPTO = 'Crypto',
-  EARNING = 'Earning & Surveys',
-  AI = 'AI & Tools',
-  SHOPPING = 'Services & Shopping',
-}
+// Changing Enum to const object for better runtime safety in browser environments
+export const Category = {
+  ALL: 'All',
+  CRYPTO: 'Crypto',
+  EARNING: 'Earning & Surveys',
+  AI: 'AI & Tools',
+  SHOPPING: 'Services & Shopping',
+} as const;
+
+export type Category = typeof Category[keyof typeof Category];
 
 export interface LinkItem {
   id: string;

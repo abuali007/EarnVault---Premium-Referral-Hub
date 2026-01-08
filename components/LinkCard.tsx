@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LinkItem, Category } from '../types';
 import { ExternalLink, Flame, Copy, Check, MousePointerClick, Loader2 } from 'lucide-react';
-import { COUNTER_NAMESPACE } from '../App';
+// Import from constants to avoid circular dependency
+import { COUNTER_NAMESPACE, API_BASE_URL } from '../constants';
 
 interface LinkCardProps {
   item: LinkItem;
@@ -10,6 +11,9 @@ interface LinkCardProps {
 }
 
 const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick, onGlobalClickIncrement }) => {
+  // Safety check: if item is undefined, return null to avoid crashing the app
+  if (!item) return null;
+
   // Extract domain for favicon
   const domain = new URL(item.url).hostname;
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
@@ -44,14 +48,16 @@ const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick, onGlobalClickInc
   useEffect(() => {
     if (!isVisible) return;
 
-    // Use GET to just read the current number
-    fetch(`https://api.countapi.xyz/get/${COUNTER_NAMESPACE}/link_${item.id}_clicks`)
+    // Use GET to just read the current number from the global database
+    // API: https://api.counterapi.dev/v1/{namespace}/{key}
+    fetch(`${API_BASE_URL}/${COUNTER_NAMESPACE}/link_${item.id}`)
       .then(res => {
         if (res.ok) return res.json();
         throw new Error('Stats fetch failed');
       })
       .then(data => {
-        if (data && typeof data.value === 'number') setClicks(data.value);
+        // CounterAPI uses 'count'
+        if (data && typeof data.count === 'number') setClicks(data.count);
         else setClicks(0);
       })
       .catch(() => {
@@ -71,11 +77,20 @@ const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick, onGlobalClickInc
   };
 
   const handleLinkClick = () => {
-    // 1. Optimistic Update (Local)
+    // 1. Optimistic Update (Immediate Feedback)
     setClicks(prev => (prev || 0) + 1);
 
-    // 2. Hit Server (Individual Link)
-    fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/link_${item.id}_clicks`).catch(() => {});
+    // 2. Hit Server (GLOBAL UPDATE)
+    // API: https://api.counterapi.dev/v1/{namespace}/{key}/up
+    fetch(`${API_BASE_URL}/${COUNTER_NAMESPACE}/link_${item.id}/up`)
+      .then(r => r.json())
+      .then(data => {
+         // CounterAPI uses 'count'
+         if(data && typeof data.count === 'number') {
+             setClicks(data.count);
+         }
+      })
+      .catch(() => {});
 
     // 3. Update Global Counter in Footer
     if (onGlobalClickIncrement) {
@@ -161,7 +176,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ item, onLinkClick, onGlobalClickInc
         
         {/* --- CLICK COUNTER & BUTTON --- */}
         <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono" title="Total Clicks">
+            <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono" title="Total Global Clicks">
                 <MousePointerClick className="w-3 h-3" />
                 {clicks === null ? (
                     <Loader2 className="w-3 h-3 animate-spin" />

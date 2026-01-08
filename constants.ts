@@ -1,5 +1,10 @@
 import { Category, LinkItem } from './types';
 
+// GLOBAL ANALYTICS CONFIGURATION
+// We switched to 'api.counterapi.dev' because 'countapi.xyz' is currently down/offline.
+export const API_BASE_URL = "https://api.counterapi.dev/v1";
+export const COUNTER_NAMESPACE = "earnvault_v2_production"; // Must be unique without spaces
+
 export const HERO_TITLE = "EarnVault";
 export const HERO_SUBTITLE = "Your Gateway to Online Wealth. A curated collection of the world's best crypto exchanges, AI tools, and passive income platforms. Verified, safe, and optimized for 2026.";
 
